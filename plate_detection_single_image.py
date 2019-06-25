@@ -97,11 +97,9 @@ def find_plate(image):
 
     return labels
 
-def prcvideo(filepath):
 
-	vidcap = cv2.VideoCapture(filepath)
-	success, image = vidcap.read()
-	size = (image.shape[1], image.shape[0])
+def proc_img(filepath):
+	image = cv2.imread(filepath)
 
 	# This is needed since the notebook is stored in the object_detection folder.
 	sys.path.append("/home/eko/.local/lib/python3.5/site-packages/tensorflow/models/research")
@@ -116,7 +114,7 @@ def prcvideo(filepath):
 
 	from object_detection.utils import visualization_utils as vis_util
 	# Path to frozen detection graph. This is the actual model that is used for the object detection.
-	PATH_TO_CKPT = 'frozen_inference_graph.pb'
+	PATH_TO_CKPT = 'frozen_inference_graph_stan.pb'
 
 	# List of the strings that is used to add correct label for each box.
 	PATH_TO_LABELS = 'labelmap.pbtxt'
@@ -151,6 +149,7 @@ def prcvideo(filepath):
 	# In[8]:
 
 
+
 	# In[10]:
 
 	start_time = time.time()
@@ -163,92 +162,80 @@ def prcvideo(filepath):
 
 		with detection_graph.as_default():
 			with tf.Session(graph=detection_graph) as sess:
-				while success:
-					image_np = np.copy(image)
-					# Expand dimensions since the model expects images to have shape: [1, None, None, 3]
-					image_np_expanded = np.expand_dims(image_np, axis=0)
-					image_tensor = detection_graph.get_tensor_by_name('image_tensor:0')
-					# Each box represents a part of the image where a particular object was detected.
-					boxes = detection_graph.get_tensor_by_name('detection_boxes:0')
-					# Each score represent how level of confidence for each of the objects.
-					# Score is shown on the result image, together with the class label.
-					scores = detection_graph.get_tensor_by_name('detection_scores:0')
-					classes = detection_graph.get_tensor_by_name('detection_classes:0')
-					num_detections = detection_graph.get_tensor_by_name('num_detections:0')
-					# Actual detection.
-					(boxes, scores, classes, num_detections) = sess.run(
-						[boxes, scores, classes, num_detections],
-						feed_dict={image_tensor: image_np_expanded})
+				image_np = np.copy(image)
+				# Expand dimensions since the model expects images to have shape: [1, None, None, 3]
+				image_np_expanded = np.expand_dims(image_np, axis=0)
+				image_tensor = detection_graph.get_tensor_by_name('image_tensor:0')
+				# Each box represents a part of the image where a particular object was detected.
+				boxes = detection_graph.get_tensor_by_name('detection_boxes:0')
+				# Each score represent how level of confidence for each of the objects.
+				# Score is shown on the result image, together with the class label.
+				scores = detection_graph.get_tensor_by_name('detection_scores:0')
+				classes = detection_graph.get_tensor_by_name('detection_classes:0')
+				num_detections = detection_graph.get_tensor_by_name('num_detections:0')
+				# Actual detection.
+				(boxes, scores, classes, num_detections) = sess.run(
+					[boxes, scores, classes, num_detections],
+					feed_dict={image_tensor: image_np_expanded})
 
-					vehicles = []
-					for i in range(len(scores[0])):
-						if scores[0][i] > 0.8:
+				vehicles = []
+				for i in range(len(scores[0])):
+					if scores[0][i] > 0.8:
 
-							x1 = int(boxes[0][i][0] * image_np.shape[0])
-							y1 = int(boxes[0][i][1] * image_np.shape[1])
-							x2 = int(boxes[0][i][2] * image_np.shape[0])
-							y2 = int(boxes[0][i][3] * image_np.shape[1])
+						x1 = int(boxes[0][i][0] * image_np.shape[0])
+						y1 = int(boxes[0][i][1] * image_np.shape[1])
+						x2 = int(boxes[0][i][2] * image_np.shape[0])
+						y2 = int(boxes[0][i][3] * image_np.shape[1])
 
-							if x2-x1 > image_np.shape[0] / 6 and y2-y1 > image_np.shape[1] / 6:
-								edges = [int(x1 + ((x2 - x1) / 4)), y1, int(x2 - ((x2 - x1) / 4)), y2]
-								vehicles.append(edges)
+						if x2-x1 > image_np.shape[0] / 6 and y2-y1 > image_np.shape[1] / 6:
+							edges = [int(x1 + ((x2 - x1) / 4)), y1, int(x2 - ((x2 - x1) / 4)), y2]
+							vehicles.append(edges)
 
-					plates = []
+				plates = []
 
-					for b in vehicles:
-						car_np = image_np[b[0]:b[2], b[1]:b[3]]
-						labels = find_plate(car_np)
+				for b in vehicles:
+					car_np = image_np[b[0]:b[2], b[1]:b[3]]
+					labels = find_plate(car_np)
 
-						for l in labels:
-						    plates.append([b[0] + l[0], b[1] + l[1], b[0] + l[2], b[1] + l[3]])
+					for l in labels:
+					    plates.append([b[0] + l[0], b[1] + l[1], b[0] + l[2], b[1] + l[3]])
 
-					for p in plates:
-						# print 'RATIO : ', float(p[3] - p[1]) / float(p[2] - p[0])
-						xmin = p[0]
-						ymin = p[1]
-						xmax = p[2]
-						ymax = p[3]
-						if p[0] - 5 >= 0:
-							xmin =  p[0] - 5
-						if p[1] - 5 >= 0:
-							ymin = p[1] - 5
-						if p[2] + 5 <= image_np.shape[0]:
-							xmax =  p[2] + 5
-						if p[3] + 5 <= image_np.shape[1]:
-							ymax = p[3] + 5
-						plt_img = image_np[xmin: xmax, ymin:ymax]
-						plate_reader = reader.reader(plt_img)
-						plate_txt = plate_reader.read()
-						if len(plate_txt) > 0:
-							print 'THE PLATE IS : ' + str(plate_txt)
-							image_np = cv2.rectangle(image_np,(p[1], p[0]),(p[3], p[2]),(0,255,255),3)
-							image_np = cv2.putText(image_np, plate_txt, (p[1], p[0]), font, 0.8 ,(80,127,255),2,cv2.LINE_AA)
+				for p in plates:
+					# print 'RATIO : ', float(p[3] - p[1]) / float(p[2] - p[0])
+					xmin = p[0]
+					ymin = p[1]
+					xmax = p[2]
+					ymax = p[3]
+					if p[0] - 5 >= 0:
+						xmin =  p[0] - 5
+					if p[1] - 5 >= 0:
+						ymin = p[1] - 5
+					if p[2] + 5 <= image_np.shape[0]:
+						xmax =  p[2] + 5
+					if p[3] + 5 <= image_np.shape[1]:
+						ymax = p[3] + 5
+					plt_img = image_np[xmin: xmax, ymin:ymax]
+					plate_reader = reader.reader(plt_img)
+					plate_txt = plate_reader.read()
+					if len(plate_txt) > 0:
+						print 'THE PLATE IS : ' + str(plate_txt)
+						image_np = cv2.rectangle(image_np,(p[1], p[0]),(p[3], p[2]),(0,255,255),3)
+						image_np = cv2.putText(image_np, plate_txt, (p[1], p[0]), font, 0.8 ,(80,127,255),2,cv2.LINE_AA)
 
-					for i in range(len(scores[0])):
-						if scores[0][i] > 0.8:
+				for i in range(len(scores[0])):
+					if scores[0][i] > 0.8:
 
-							x1 = int(boxes[0][i][0] * image_np.shape[0])
-							y1 = int(boxes[0][i][1] * image_np.shape[1])
-							x2 = int(boxes[0][i][2] * image_np.shape[0])
-							y2 = int(boxes[0][i][3] * image_np.shape[1])
+						x1 = int(boxes[0][i][0] * image_np.shape[0])
+						y1 = int(boxes[0][i][1] * image_np.shape[1])
+						x2 = int(boxes[0][i][2] * image_np.shape[0])
+						y2 = int(boxes[0][i][3] * image_np.shape[1])
 
-							image_np = cv2.rectangle(image_np,(y1,x1),(y2, x2),(0,255,0),3)
+						image_np = cv2.rectangle(image_np,(y1,x1),(y2, x2),(0,255,0),3)
 
-					success, image = vidcap.read()
-					image_array.append(image_np)
 
 	except Exception as e:
 		print(e)
 
 	finally:
-		print len(image_array), " frames"
-		print "--- %s seconds ---" % (time.time() - start_time)
-
-		fourcc = cv2.VideoWriter_fourcc('D', 'I', 'V', 'X')
-		out = cv2.VideoWriter('dtc_video.mp4', fourcc, 24, size)
-		for i in range(len(image_array)):
-			out.write(image_array[i])
-		out.release()
-
-	print(len(image_array), " frames")
-	print("--- %s seconds ---" % (time.time() - start_time))
+		cv2.imwrite('dtcimg.png', image_np)
+		return plate_txt
